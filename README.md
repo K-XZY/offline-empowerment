@@ -5,6 +5,7 @@ Code for the paper. It contains
 - **our offline empowerment estimator** (Sec. 4), trained on unlabeled [OGBench](https://github.com/seohongpark/ogbench) datasets,
 - the four **offline empowerment baselines** (Sec. 5.1 / A.6): CF, CF-FlowBC, DV and DADS-Empowerment,
 - **online exploration** with CRL + RLPD, with our empowerment bonus, an RND bonus, or both (Sec. 5.2 / A.3),
+- the **SUPE** baseline (OPAL skill pretraining + online SUPE), with or without our empowerment bonus,
 - the four **online goal-reaching tasks** (A.3.1).
 
 Hyperparameters are in the paper (Tables 1, 3–5 and A.6). Below we list which flag each one maps to.
@@ -113,11 +114,41 @@ python train_online.py --env_name=... --offline_dataset=... --agent.rnd_bonus_sc
 anneal β / β_RND linearly to 0 over that fraction of training, and `--rlpd_frac_time` stops mixing in offline data
 after that fraction of training.
 
+### SUPE
+
+SUPE first pretrains OPAL skills on the offline dataset (the skill horizon H must match the online
+`skill_commitment_k`), then trains the online high level on those frozen skills:
+
+```bash
+python train_offline.py --env_name=antmaze-medium-navigate-v0 --agent=agents/opal.py \
+    --agent.chunk_size=$H --agent.sequence_length=$H --agent.kl_coef=$KL --agent.batch_size=256
+
+python train_online.py --agent=agents/supe.py --env_name=antmaze-medium-corner-all-squares-online-v0 \
+    --offline_dataset=antmaze-medium-navigate-v0 --agent.skill_checkpoint_path=exp/<opal run> \
+    --agent.goal_conditioned=True --agent.aux_schedule=paper --agent.minibatch_split=interleave \
+    --agent.gamma_low=0.99 --agent.discount=$GAMMA --agent.num_min_qs=$NUM_MIN_QS --agent.utd_ratio=4
+
+# SUPE + Empowerment (ours): add
+#   --agent.add_explore=distill-to-rlpd --agent.emp_checkpoint_path=exp/<estimator run> --agent.bonus_scale=$BETA
+```
+
+`goal_conditioned` feeds the task goal to SUPE's actor, critic and reward model (offline rows get random task goals),
+`aux_schedule=paper` trains the reward model and RND predictor once per macro step as in SUPE, `interleave` makes every
+critic minibatch half online / half offline, and `utd_ratio=4` with the default 1024-row critic step gives SUPE the same
+gradient budget as the CRL agents.
+
+| Paper (Table 4, SUPE)                    | Flag                                                         |
+| ---------------------------------------- | ------------------------------------------------------------ |
+| skill horizon H                          | `--agent.chunk_size` / `--agent.sequence_length` (OPAL), `--agent.skill_commitment_k` (SUPE, default = OPAL's) |
+| skill latent dimension, OPAL KL coef     | `--agent.skill_dim`, `--agent.kl_coef` (OPAL)                |
+| number of critics / critics in target min | `--agent.num_qs`, `--agent.num_min_qs`                      |
+| discount, RND coefficient, warm-up steps | `--agent.discount`, `--agent.rnd_coeff`, `--agent.warmup_env_steps` |
+
 ## Code layout
 
 ```
-train_offline.py            offline estimator training
-train_online.py             online CRL (+ RLPD, + bonuses)
+train_offline.py            offline estimator / OPAL training
+train_online.py             online CRL or SUPE (+ RLPD, + bonuses)
 agents/
   empowerment_skill.py      our estimator
   empowerment_crl.py        CF-Empowerment
@@ -125,9 +156,12 @@ agents/
   empowerment_dv.py         DV-Empowerment
   empowerment_dads.py       DADS-Empowerment
   online_crl.py             online CRL with the empowerment / RND bonus
+  opal.py                   OPAL skills (SUPE's offline stage)
+  supe.py                   SUPE (+ empowerment bonus)
 envs/                       online goal-reaching tasks
 utils/                      datasets, networks, replay buffer, RLPD, rollouts, logging
 ```
 
 This code builds on the [OGBench](https://github.com/seohongpark/ogbench) reference implementations
-(`envs/maze.py` is a lightly modified copy of OGBench's maze env).
+(`envs/maze.py` is a lightly modified copy of OGBench's maze env), and the OPAL / SUPE agents port
+[the SUPE code](https://github.com/rail-berkeley/supe).

@@ -190,7 +190,7 @@ def get_config():
             latent_dim=256,
             layer_norm=True,
             empowerment_hidden_dims=(256, 256),  # E_theta
-            crl_pretrain_steps=500_000,  # contrastive steps before switching to distillation
+            crl_pretrain_steps=500_000,  # distillation starts at this train step
             discount=0.99,
             # s+ is a geometrically-sampled future state of the same trajectory
             value_p_trajgoal=1.0,

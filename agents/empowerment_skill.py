@@ -113,6 +113,22 @@ class SkillConditionedActor(GCActor):
         return distrax.MultivariateNormalDiag(loc=means, scale_diag=jnp.ones_like(means))
 
 
+# settings of the original research code that this implementation fixes
+PAPER_VARIANT = dict(
+    separate_qv=True,
+    stochastic_policy_actions=True,
+    perturb_q_loss_actions=True,
+    sample_z=True,
+    no_target_q_for_policy=True,
+    use_self_q_loss=True,
+    only_bc=False,
+    anneal_alpha=False,
+    obs_indices=None,
+    encoder=None,
+    discrete=False,
+)
+
+
 class EmpowermentAgent(flax.struct.PyTreeNode):
     """Offline empowerment agent. Networks: q, v, target_q, target_v, policy."""
 
@@ -373,6 +389,10 @@ class EmpowermentAgent(flax.struct.PyTreeNode):
 
     @classmethod
     def create(cls, seed, ex_observations, ex_actions, config):
+        # only the paper's variant is implemented here; catch old flags.json configs that used another one
+        for key, value in PAPER_VARIANT.items():
+            assert config.get(key, value) == value, f'{key}={config[key]} is not supported (needs {value})'
+
         rng = jax.random.PRNGKey(seed)
         rng, init_rng = jax.random.split(rng)
 

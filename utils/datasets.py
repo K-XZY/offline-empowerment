@@ -53,8 +53,8 @@ class Dataset(FrozenDict):
 class GCDataset:
     """Samples transitions together with a future-state s+ (`value_goals`).
 
-    s+ is either a future state of the same trajectory at a geometric offset (clamped to the trajectory end), with
-    prob `value_p_trajgoal`, or a uniformly random dataset state, with prob `value_p_randomgoal`.
+    s+ is either a future state of the same trajectory at a geometric offset (clamped to the trajectory's last valid
+    state), with prob `value_p_trajgoal`, or a uniformly random valid dataset state, with prob `value_p_randomgoal`.
     """
 
     dataset: Dataset

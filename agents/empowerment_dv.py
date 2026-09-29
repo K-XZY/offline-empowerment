@@ -74,7 +74,7 @@ def get_config():
             layer_norm=True,
             flow_steps=8,  # euler steps for flow sampling
             num_negatives=7,  # N deranged negatives
-            pretrain_steps=100000,  # pi_bc / f_dyn-only steps before the critic trains
+            pretrain_steps=100000,  # critic starts training at this train step (pi_bc / f_dyn only before)
             est_num_joints=16,  # joints per state in empowerment()
             discount=0.99,
             # s+ is a geometrically-sampled future state of the same trajectory

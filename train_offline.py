@@ -34,14 +34,15 @@ config_flags.DEFINE_config_file('agent', 'agents/empowerment_skill.py', lock_con
 
 
 def main(_):
+    config = FLAGS.agent
+    if 'log_interval' in config:
+        config['log_interval'] = FLAGS.log_interval
+
     exp_name = get_exp_name(FLAGS.seed)
     setup_wandb(group=FLAGS.run_group, name=exp_name)
     FLAGS.save_dir = os.path.join(FLAGS.save_dir, FLAGS.run_group, exp_name)
     os.makedirs(FLAGS.save_dir, exist_ok=True)
 
-    config = FLAGS.agent
-    if 'log_interval' in config:
-        config['log_interval'] = FLAGS.log_interval
     with open(os.path.join(FLAGS.save_dir, 'flags.json'), 'w') as f:
         json.dump(get_flag_dict(), f)
 

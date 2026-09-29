@@ -62,6 +62,8 @@ def main(_):
     env = make_online_env(FLAGS.env_name, episode_length=FLAGS.episode_length)
     eval_env = make_online_env(FLAGS.env_name, episode_length=FLAGS.episode_length)
     horizon = env_horizon(env)
+    assert horizon is not None, 'env has no TimeLimit, pass --episode_length'
+    assert 0.0 <= FLAGS.rlpd_frac_time <= 1.0
 
     random.seed(FLAGS.seed)
     np.random.seed(FLAGS.seed)
@@ -77,6 +79,7 @@ def main(_):
 
     unroll_length = int(config['unroll_length'])
     updates_per_round = int(unroll_length * float(config['utd_ratio']))
+    assert updates_per_round >= 1, 'unroll_length * utd_ratio rounds down to 0 updates per round'
     batch_size = int(config['batch_size'])
 
     # RLPD for the first rlpd_frac_time of the run, online-only afterwards

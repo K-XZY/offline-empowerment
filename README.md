@@ -38,6 +38,15 @@ Runs go to `exp/<run_group>/<run_name>/` (`flags.json`, `params_<step>.pkl`, `tr
 estimator (ours or a baseline), `agent.empowerment(observations, rng)` returns Ê(s) at arbitrary states; the
 baselines' logged `mi_estimate` is their bound on dataset samples, not this.
 
+To train an existing run for longer (or continue after a crash), resume it from its latest checkpoint:
+
+```bash
+python train_offline.py --resume_dir=exp/<run_group>/<run_name> --train_steps=<new total>
+```
+
+This reuses the run's `flags.json`, appends to its `train.csv` / wandb run and restores the numpy rng, so the result is
+the same as one uninterrupted run.
+
 | Paper (Table 1)                    | Flag                                   |
 | ---------------------------------- | -------------------------------------- |
 | number of skills K                 | `--agent.num_skills`                   |

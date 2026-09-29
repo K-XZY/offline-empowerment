@@ -8,13 +8,26 @@ import wandb
 
 
 class CsvLogger:
-    """Logs metric dicts to a csv file (header fixed by the first row)."""
+    """Logs metric dicts to a csv file (header fixed by the first row).
 
-    def __init__(self, path):
+    With `resume_step`, an existing file is kept up to that step and appended to.
+    """
+
+    def __init__(self, path, resume_step=None):
         self.path = path
         self.header = None
         self.file = None
         self.disallowed_types = (wandb.Image, wandb.Video, wandb.Histogram)
+        if resume_step is not None and os.path.exists(path) and os.path.getsize(path) > 0:
+            with open(path) as f:
+                lines = f.read().splitlines()
+            self.header = lines[0].split(',')
+            step_col = self.header.index('step')
+            # drop rows logged after the checkpoint we resume from
+            rows = [line for line in lines[1:] if int(line.split(',')[step_col]) <= resume_step]
+            self.file = open(path, 'w')
+            self.file.write('\n'.join([lines[0], *rows]) + '\n')
+            self.file.flush()
 
     def log(self, row, step):
         row['step'] = step
@@ -62,8 +75,8 @@ def _wandb_settings():
     return wandb.Settings(**wanted)
 
 
-def setup_wandb(project='offline-empowerment', group=None, name=None, entity=None):
-    """Set up wandb. Respects WANDB_MODE (e.g. WANDB_MODE=disabled to turn it off)."""
+def setup_wandb(project='offline-empowerment', group=None, name=None, entity=None, run_id=None):
+    """Set up wandb. Respects WANDB_MODE (e.g. WANDB_MODE=disabled to turn it off). `run_id` resumes a run."""
     return wandb.init(
         config=get_flag_dict(),
         project=project,
@@ -75,4 +88,6 @@ def setup_wandb(project='offline-empowerment', group=None, name=None, entity=Non
         settings=_wandb_settings(),
         mode=os.environ.get('WANDB_MODE', 'online'),
         save_code=True,
+        id=run_id,
+        resume='allow' if run_id is not None else None,
     )

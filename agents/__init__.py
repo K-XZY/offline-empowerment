@@ -4,6 +4,8 @@ from agents.empowerment_dads import EmpowermentDADSAgent
 from agents.empowerment_dv import EmpowermentDVAgent
 from agents.empowerment_skill import EmpowermentAgent
 from agents.online_crl import OnlineCRLAgent
+from agents.opal import OPALAgent
+from agents.supe import SUPEAgent
 
 agents = dict(
     empowerment_skill=EmpowermentAgent,  # ours
@@ -12,4 +14,6 @@ agents = dict(
     empowerment_dv=EmpowermentDVAgent,  # DV-Empowerment
     empowerment_dads=EmpowermentDADSAgent,  # DADS-Empowerment
     online_crl=OnlineCRLAgent,  # online CRL (+ empowerment / RND bonus)
+    opal=OPALAgent,  # OPAL skills (offline stage of SUPE)
+    supe=SUPEAgent,  # SUPE (+ empowerment bonus)
 )

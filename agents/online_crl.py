@@ -343,7 +343,9 @@ class OnlineCRLAgent(flax.struct.PyTreeNode):
     def total_loss(self, batch, grad_params, rng=None, env_steps=None):
         info = {}
         rng = rng if rng is not None else self.rng
-        actor_rng, rnd_rng, rnd_critic_rng = jax.random.split(rng, 3)
+        # same key layout as the original research code, so a seed reproduces its runs exactly
+        rng, actor_rng, _, _ = jax.random.split(rng, 4)
+        rnd_rng, rnd_critic_rng = jax.random.split(rng)
 
         loss, critic_info = self.contrastive_loss(batch, grad_params)
         info.update({f'critic/{k}': v for k, v in critic_info.items()})

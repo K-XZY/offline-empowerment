@@ -18,7 +18,8 @@ uv sync                # cpu
 uv sync --extra cuda   # gpu (jax[cuda12])
 ```
 
-Then run everything with `uv run python ...` (or activate `.venv`). With pip, install the packages listed in
+Then run everything from the repo root with `uv run python ...` (or activate `.venv`). `.python-version` pins
+python 3.11, which is what we tested with. With pip, install the packages listed in
 `pyproject.toml` (`ogbench==1.2.1`, `jax`, `flax`, `distrax`, `optax`, `ml_collections`, `absl-py`, `wandb`, ...).
 
 Datasets are downloaded by ogbench to `~/.ogbench/data` on first use (set `OGBENCH_DATASET_DIR` to change that).
@@ -33,7 +34,9 @@ python train_offline.py --env_name=antmaze-medium-navigate-v0 --agent=agents/emp
 ```
 
 Runs go to `exp/<run_group>/<run_name>/` (`flags.json`, `params_<step>.pkl`, `train.csv`). The logged
-`training/empowerment/*` and `validation/empowerment/*` are the estimate Ê(s) (eq. 15) on a batch.
+`training/empowerment/*` and `validation/empowerment/*` are the estimate Ê(s) (eq. 15) on a batch. For any trained
+estimator (ours or a baseline), `agent.empowerment(observations, rng)` returns Ê(s) at arbitrary states; the
+baselines' logged `mi_estimate` is their bound on dataset samples, not this.
 
 | Paper (Table 1)                    | Flag                                   |
 | ---------------------------------- | -------------------------------------- |
@@ -59,7 +62,8 @@ Same script, different `--agent`:
 
 ## Online exploration
 
-The online tasks (A.3.1) are registered in `envs/`. Use them with `online` in place of the dataset type:
+The online tasks (A.3.1) are registered in `envs/`. Use them with `online` in place of the dataset type (the bare
+registered ids, e.g. `antmaze-medium-corner-all-squares-v0`, won't work as `--env_name`):
 
 | Task               | `--env_name`                                      | Horizon | `--offline_dataset` (RLPD) |
 | ------------------ | ------------------------------------------------- | ------- | -------------------------- |
@@ -90,6 +94,8 @@ python train_online.py --env_name=... --offline_dataset=... --agent.rnd_bonus_sc
 | RND bonus weight β_RND                     | `--agent.rnd_bonus_scale`                    |
 | future-state samples per skill for Ê       | `--agent.emp_num_splus_samples`              |
 | offline fraction of each batch (RLPD)      | `--agent.offline_ratio`                      |
+| target entropy multiplier, replay size     | `--agent.target_entropy_multiplier`, `--agent.replay_size` |
+| total env steps                            | `--total_env_steps`                          |
 | env steps per update round / updates per env step / warm-up steps | `--agent.unroll_length`, `--agent.utd_ratio`, `--agent.min_replay_size` |
 | RND nets, predictor lr, Q_RND discount / τ | `--agent.rnd_hidden_dims`, `--agent.rnd_rep_dim`, `--agent.rnd_lr`, `--agent.bonus_discount`, `--agent.bonus_tau` |
 

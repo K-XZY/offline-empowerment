@@ -85,6 +85,11 @@ def main(_):
     rlpd_end_step = 0
     offline_source = None
     if FLAGS.offline_dataset is not None:
+        if agent.uses_empowerment:
+            with open(os.path.join(config['emp_checkpoint_path'], 'flags.json')) as f:
+                emp_env = json.load(f)['env_name']
+            if emp_env != FLAGS.offline_dataset:
+                print(f'[train_online] WARNING: estimator was trained on {emp_env}, rlpd uses {FLAGS.offline_dataset}')
         offline_source = make_offline_source(
             FLAGS.offline_dataset, agent, example_transition(example_batch), seed=FLAGS.seed
         )

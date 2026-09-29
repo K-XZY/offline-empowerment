@@ -81,3 +81,42 @@ class GCDataset:
         traj_goal_idxs = np.minimum(idxs + offsets, final_state_idxs)
 
         return np.where(np.random.rand(batch_size) < self.config['value_p_trajgoal'], traj_goal_idxs, random_goal_idxs)
+
+
+@dataclasses.dataclass
+class SequenceDataset:
+    """Samples windows [t, t + T) of observations / actions (OPAL).
+
+    Windows are clamped to the trajectory end, `seq_mask` marks the padded steps.
+    """
+
+    dataset: Dataset
+    config: Any
+
+    def __post_init__(self):
+        self.size = self.dataset.size
+        (self.terminal_locs,) = np.nonzero(self.dataset['terminals'] > 0)
+        assert self.terminal_locs[-1] == self.size - 1
+
+    def windows(self, idxs):
+        T = int(self.config['sequence_length'])
+        final_state_idxs = self.terminal_locs[np.searchsorted(self.terminal_locs, idxs)]
+        raw_idxs = idxs[:, None] + np.arange(T)[None, :]
+        seq_idxs = np.minimum(raw_idxs, final_state_idxs[:, None])
+        seq_mask = (raw_idxs <= final_state_idxs[:, None]).astype(np.float32)
+        return self.dataset['observations'][seq_idxs], self.dataset['actions'][seq_idxs], seq_mask
+
+    def sample(self, batch_size):
+        idxs = self.dataset.get_random_idxs(batch_size)
+        batch = self.dataset.sample(batch_size, idxs)
+        batch['observations_seq'], batch['actions_seq'], batch['seq_mask'] = self.windows(idxs)
+        return batch
+
+    def iter_windows(self, chunk_bytes=64 * 1024 * 1024):
+        """(obs_seq, act_seq, seq_mask) for every start index, in blocks of about `chunk_bytes`."""
+        T = int(self.config['sequence_length'])
+        obs = self.dataset['observations']
+        item_bytes = int(np.prod(obs.shape[1:])) * obs.dtype.itemsize
+        block_size = int(np.clip(chunk_bytes // max(item_bytes * T, 1), 256, 100000))
+        for start in range(0, self.size, block_size):
+            yield self.windows(np.arange(start, min(start + block_size, self.size)))

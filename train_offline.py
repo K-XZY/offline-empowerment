@@ -1,4 +1,4 @@
-"""Train an empowerment estimator (ours or a baseline) on an ogbench dataset.
+"""Train an empowerment estimator (ours or a baseline), or the OPAL skills for SUPE, on an ogbench dataset.
 
 `--resume_dir=<run dir>` continues a run from its latest checkpoint (e.g. with a larger --train_steps). The run's own
 flags.json is replayed, and the numpy rng state is checkpointed too, so a resumed run matches an uninterrupted one.
@@ -19,7 +19,7 @@ from absl import app, flags
 from ml_collections import config_flags
 
 from agents import agents
-from utils.datasets import Dataset, GCDataset
+from utils.datasets import Dataset, GCDataset, SequenceDataset
 from utils.env_utils import load_datasets
 from utils.flax_utils import restore_agent, save_agent
 from utils.log_utils import CsvLogger, get_exp_name, get_flag_dict, setup_wandb
@@ -76,8 +76,9 @@ def main(_):
         json.dump(get_flag_dict(), f)
 
     train_dataset, val_dataset = load_datasets(FLAGS.env_name)
-    train_dataset = GCDataset(Dataset.create(**train_dataset), config)
-    val_dataset = GCDataset(Dataset.create(**val_dataset), config)
+    dataset_class = SequenceDataset if config.get('dataset_class') == 'SequenceDataset' else GCDataset
+    train_dataset = dataset_class(Dataset.create(**train_dataset), config)
+    val_dataset = dataset_class(Dataset.create(**val_dataset), config)
 
     random.seed(FLAGS.seed)
     np.random.seed(FLAGS.seed)

@@ -1,7 +1,7 @@
-"""Online goal-reaching with CRL (+ RLPD), optionally with the empowerment and / or RND exploration bonus.
+"""Online goal-reaching with CRL or SUPE (+ RLPD), optionally with the empowerment and / or RND exploration bonus.
 
-Every `unroll_length` env steps (after `min_replay_size` warm-up steps) we run `unroll_length * utd_ratio`
-updates. Logging / eval / checkpoints are keyed on env steps.
+Every `unroll_length` replay rows (env steps for CRL, macro steps for SUPE), once `min_replay_size` rows are in the
+buffer, we run `unroll_length * utd_ratio` updates. Logging / eval / checkpoints are keyed on env steps.
 """
 
 import json
@@ -22,8 +22,8 @@ from utils.env_utils import env_horizon, make_example_batch, make_online_env
 from utils.flax_utils import save_agent
 from utils.log_utils import CsvLogger, get_exp_name, get_flag_dict, setup_wandb
 from utils.replay_buffer import TrajectoryReplayBuffer
-from utils.rlpd import BufferSource, MixedBatchSampler, make_offline_source
-from utils.rollout import Collector, evaluate, example_transition
+from utils.rlpd import BufferSource, GoalBankSource, MixedBatchSampler, make_offline_source
+from utils.rollout import Collector, MacroCollector, evaluate, example_transition
 
 FLAGS = flags.FLAGS
 
@@ -73,9 +73,21 @@ def main(_):
         FLAGS.seed, example_batch['observations'], example_batch['actions'], config
     )
 
-    buffer = TrajectoryReplayBuffer.create(example_transition(example_batch), int(config['replay_size']))
-    assert buffer.capacity > horizon + 1
-    collector = Collector(env, buffer, seed=FLAGS.seed)
+    # schedule keys come from the created agent (supe fills in some defaults from its skill horizon)
+    config = agent.config
+    macro = config['agent_name'] == 'supe'
+    row_layout = example_transition(example_batch, agent)
+    buffer = TrajectoryReplayBuffer.create(row_layout, int(config['replay_size']))
+    if macro:
+        k = int(config['skill_commitment_k'])
+        assert horizon % k == 0, f'episode horizon {horizon} must be divisible by skill_commitment_k {k}'
+        assert buffer.capacity > horizon // k + 1
+        collector = MacroCollector(
+            env, buffer, FLAGS.seed, k, config['gamma_low'], config['reward_shift'], agent.stores_task_goals
+        )
+    else:
+        assert buffer.capacity > horizon + 1
+        collector = Collector(env, buffer, seed=FLAGS.seed)
 
     unroll_length = int(config['unroll_length'])
     updates_per_round = int(unroll_length * float(config['utd_ratio']))
@@ -93,9 +105,23 @@ def main(_):
                 emp_env = json.load(f)['env_name']
             if emp_env != FLAGS.offline_dataset:
                 print(f'[train_online] WARNING: estimator was trained on {emp_env}, rlpd uses {FLAGS.offline_dataset}')
-        offline_source = make_offline_source(
-            FLAGS.offline_dataset, agent, example_transition(example_batch), seed=FLAGS.seed
-        )
+        offline_source = make_offline_source(FLAGS.offline_dataset, agent, row_layout, seed=FLAGS.seed)
+        if getattr(agent, 'stores_task_goals', False):
+            # goal-conditioned SUPE: offline rows get goals from the env's own tasks (a few resets each, since a
+            # task's goal observation can vary between resets)
+            bank_env = make_online_env(FLAGS.env_name, episode_length=FLAGS.episode_length)
+            resets = int(config['goal_bank_resets_per_task'])
+            goal_bank = np.stack(
+                [
+                    np.asarray(bank_env.reset(options=dict(task_id=task_id))[1]['goal'], dtype=np.float32)
+                    for task_id in range(1, int(bank_env.unwrapped.num_tasks) + 1)
+                    for _ in range(resets)
+                ]
+            )
+            bank_env.close()
+            offline_source = GoalBankSource(
+                offline_source.buffer, offline_source.discount, offline_source.next_offset, goal_bank=goal_bank
+            )
         rlpd_end_step = int(round(FLAGS.rlpd_frac_time * FLAGS.total_env_steps))
         if rlpd_end_step > 0:
             sampler = MixedBatchSampler(online_sampler, offline_source, float(config['offline_ratio']))
@@ -123,6 +149,7 @@ def main(_):
     rows_since_update = 0
     round_infos, round_num_updates = None, 0  # update metrics summed on device, averaged at log time
     stream_infos = defaultdict(list)
+    aux_keys = {}  # supe aux_schedule='paper': metric names of update_rm / update_rnd
     episode_stats = defaultdict(list)
     next_log, next_eval, next_save = FLAGS.log_interval, 0, FLAGS.save_interval
     last_saved_step = None
@@ -138,10 +165,10 @@ def main(_):
             eval_logger.log(eval_metrics, step=env_steps)
             next_eval += FLAGS.eval_interval
 
-        episode = collector.step(agent)
-        env_steps += 1
+        steps, episode = collector.step(agent)
+        env_steps += steps
         rows_since_update += 1
-        pbar.update(1)
+        pbar.update(steps)
         if episode is not None:
             for k, v in episode.items():
                 episode_stats[k].append(v)
@@ -156,7 +183,7 @@ def main(_):
                 collector.flush_empowerment(agent)
                 if agent.emp_mean is None:
                     agent = set_empowerment_mean(agent)
-            if agent.uses_rnd:
+            if getattr(agent, 'uses_rnd', False):
                 agent, rnd_info = collector.flush_rnd(agent)
                 for k, v in rnd_info.items():
                     stream_infos[f'rnd_stream/{k}'].append(v)
@@ -165,6 +192,25 @@ def main(_):
                 num_updates += 1
                 round_infos = update_info if round_infos is None else _tree_add(round_infos, update_info)
                 round_num_updates += 1
+            if macro and config['aux_schedule'] == 'paper':
+                # SUPE: reward model on a batch of online rows and RND on the newest transition, once per macro step
+                rm_batch = online_sampler.sample(int(config['rm_updates_per_macro']) * int(config['rm_batch_size']))
+                aux_calls = [
+                    ('rm', int(config['rm_start_env_steps']), lambda a: a.update_rm(rm_batch)),
+                    ('rnd', int(config['rnd_start_env_steps']), lambda a: a.update_rnd(collector.last_transition)),
+                ]
+                for name, start, call in aux_calls:
+                    if env_steps >= start:
+                        agent, aux_info = call(agent)
+                        aux_keys[name] = list(aux_info)
+                        for k, v in aux_info.items():
+                            stream_infos[k].append(v)
+                    else:
+                        # log zeros until it starts so the csv header has the columns
+                        if name not in aux_keys:
+                            aux_keys[name] = list(jax.eval_shape(call, agent)[1])
+                        for k in aux_keys[name]:
+                            stream_infos[k].append(0.0)
 
         if env_steps >= next_log:
             next_log += FLAGS.log_interval

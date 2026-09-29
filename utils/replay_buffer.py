@@ -72,9 +72,12 @@ class TrajectoryReplayBuffer:
         self.total += 1
         return self.total - 1
 
-    def add_transition(self, transition):
-        """Append one transition of the in-progress trajectory, returns its absolute index."""
-        abs_idx = self._write_row(transition, valid=True)
+    def add_transition(self, transition, valid=True):
+        """Append one transition of the in-progress trajectory, returns its absolute index.
+
+        `valid=False` rows are stored (they stay next observations / goals of other rows) but are never anchors.
+        """
+        abs_idx = self._write_row(transition, valid=valid)
         self._open_rows.append(abs_idx)
         return abs_idx
 
@@ -111,8 +114,11 @@ class TrajectoryReplayBuffer:
             self._valid_slots_cache = (self.total, slots)
         return self._valid_slots_cache[1]
 
-    def sample(self, batch_size, discount):
-        """Batch of stored fields + `next_observations`, `value_goals` / `actor_goals` (the same future obs)."""
+    def sample(self, batch_size, discount, next_offset=1):
+        """Batch of stored fields + `next_observations`, `value_goals` / `actor_goals` (the same future obs).
+
+        `next_offset` is the number of rows to the next observation (k for offline SUPE rows stored per env step).
+        """
         valid_slots = self._valid_anchor_slots()
         oldest = self.oldest_abs
         latest = self.total - 1
@@ -125,7 +131,7 @@ class TrajectoryReplayBuffer:
         ends = self._traj_end[slots]
         ends = np.where(ends < 0, latest, ends)
         goal_abs = abs_idxs + _truncated_geometric_offsets(ends - abs_idxs, discount)
-        next_abs = np.minimum(abs_idxs + 1, ends)
+        next_abs = np.minimum(abs_idxs + next_offset, ends)
 
         batch = {key: buffer[slots] for key, buffer in self._data.items()}
         batch['next_observations'] = self._data['observations'][self._slot(next_abs)]

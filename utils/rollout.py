@@ -7,11 +7,12 @@ import jax.numpy as jnp
 import numpy as np
 
 
-def example_transition(example_batch):
-    """Row layout of the replay buffers."""
-    return dict(
+def example_transition(example_batch, agent):
+    """Row layout of the replay buffers (SUPE stores its latent skill u as the action)."""
+    example_skill = getattr(agent, 'example_skill', None)
+    row = dict(
         observations=example_batch['observations'][0],
-        actions=example_batch['actions'][0],
+        actions=example_batch['actions'][0] if example_skill is None else example_skill(),
         rewards=np.float32(0.0),
         masks=np.float32(1.0),
         terminals=np.float32(0.0),
@@ -20,6 +21,9 @@ def example_transition(example_batch):
         distill_target=np.float32(0.0),
         distill_target_ready=np.float32(0.0),
     )
+    if getattr(agent, 'stores_task_goals', False):
+        row['task_goals'] = np.zeros_like(example_batch['observations'][0])
+    return row
 
 
 class Collector:
@@ -92,7 +96,7 @@ class Collector:
         return agent, {k: float(np.asarray(v)) for k, v in info.items()}
 
     def step(self, agent):
-        """One env step. Returns the episode stats if the episode ended, else None."""
+        """One env step. Returns (env steps taken, episode stats if the episode ended else None)."""
         self.rng, key = jax.random.split(self.rng)
         action = np.asarray(agent.sample_actions(observations=self.observation, goals=self.goal, seed=key))
         action = np.clip(action, -1, 1)
@@ -128,7 +132,7 @@ class Collector:
         self.observation = next_observation
 
         if not done:
-            return None
+            return 1, None
         end_abs = self.buffer.end_trajectory(next_observation)
         if agent.uses_empowerment:
             # the final observation also needs its E (it's in the episode max)
@@ -141,22 +145,105 @@ class Collector:
             self._pending_rnd_first.append(False)
         episode = dict(episode_return=self.ep_return, episode_length=self.ep_length, episode_success=self.ep_success)
         self._reset_episode()
-        return episode
+        return 1, episode
+
+
+class MacroCollector(Collector):
+    """SUPE: one row per macro step. The high level picks u (the OPAL prior during warm-up), the frozen decoder runs
+    it for k env steps (or until the episode ends), and the row is (s_t, u, R, mask) with
+    R = sum_i gamma_low^i (r_i + reward_shift)."""
+
+    def __init__(self, env, buffer, seed, k, gamma_low, reward_shift, store_task_goals):
+        self.k = int(k)
+        self.gamma_low = float(gamma_low)
+        self.reward_shift = float(reward_shift)
+        self.store_task_goals = store_task_goals
+        self.env_steps = 0
+        self.last_transition = None  # newest (s, u), for SUPE's per-macro-step RND update
+        super().__init__(env, buffer, seed)
+
+    def step(self, agent):
+        self.rng, skill_key, low_key = jax.random.split(self.rng, 3)
+        skill = agent.sample_skills(
+            observations=self.observation, goals=self.goal, seed=skill_key, temperature=1.0, env_steps=self.env_steps
+        )
+        skill = np.asarray(skill, dtype=np.float32)
+
+        start_observation = self.observation
+        macro_return, disc = 0.0, 1.0
+        terminated_any, done = False, False
+        env_steps = 0
+        for _ in range(self.k):
+            low_key, action_key = jax.random.split(low_key)
+            action = np.asarray(agent.low_level_actions(observations=self.observation, skills=skill, seed=action_key))
+            next_observation, reward, terminated, truncated, info = self.env.step(action)
+            env_steps += 1
+            self.ep_return += float(reward)
+            self.ep_length += 1
+            self.ep_success = float(info.get('success', self.ep_success))
+            macro_return += disc * (float(reward) + self.reward_shift)
+            disc *= self.gamma_low
+            terminated_any = terminated_any or bool(terminated)
+            self.observation = next_observation
+            done = bool(terminated or truncated)
+            if done:
+                break
+        self.env_steps += env_steps
+
+        nan_if = lambda flag: np.float32(np.nan if flag else 0.0)  # noqa: E731
+        row = dict(
+            observations=start_observation,
+            actions=skill,
+            rewards=np.float32(macro_return),
+            masks=np.float32(1.0 - float(terminated_any)),
+            terminals=np.float32(done),
+            empowerment=nan_if(agent.uses_empowerment),
+            is_offline=np.float32(0.0),
+            distill_target=nan_if(agent.uses_empowerment),
+            distill_target_ready=np.float32(0.0),
+        )
+        if self.store_task_goals:
+            row['task_goals'] = self.goal  # fixed for the whole episode
+        abs_idx = self.buffer.add_transition(row)
+        self.last_transition = dict(observations=start_observation, actions=skill)
+        if agent.uses_empowerment:
+            if self._episode_start_abs is None:
+                self._episode_start_abs = abs_idx
+            self._pending_empowerment.append(abs_idx)
+
+        if not done:
+            return env_steps, None
+        end_abs = self.buffer.end_trajectory(self.observation)
+        if agent.uses_empowerment:
+            self.buffer.write_field('empowerment', [end_abs], np.array([np.nan], dtype=np.float32))
+            self._pending_empowerment.append(end_abs)
+            self._closed_episodes.append((self._episode_start_abs, end_abs))
+            self._episode_start_abs = None
+        episode = dict(episode_return=self.ep_return, episode_length=self.ep_length, episode_success=self.ep_success)
+        self._reset_episode()
+        return env_steps, episode
 
 
 def evaluate(agent, env, num_episodes, temperature=0.0):
-    """Random-task episodes with the deterministic actor; returns mean success / return / length."""
+    """Random-task episodes with the deterministic actor (SUPE: deterministic high level, held for k steps);
+    returns mean success / return / length."""
     rng = jax.random.PRNGKey(np.random.randint(0, 2**32))
+    stateful = hasattr(agent, 'init_eval_state')
     stats = defaultdict(list)
     for _ in range(num_episodes):
         observation, info = env.reset()
         goal = info['goal']
+        agent_state = agent.init_eval_state() if stateful else None
         done, step, ep_return = False, 0, 0.0
         while not done:
             rng, key = jax.random.split(rng)
-            action = np.clip(
-                np.array(agent.sample_actions(observation, goal, seed=key, temperature=temperature)), -1, 1
-            )
+            if stateful:
+                action, agent_state = agent.sample_actions_with_state(
+                    observations=observation, goals=goal, agent_state=agent_state, seed=key, temperature=temperature
+                )
+            else:
+                action = agent.sample_actions(observation, goal, seed=key, temperature=temperature)
+            action = np.clip(np.array(action), -1, 1)
             observation, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
             step += 1

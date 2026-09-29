@@ -79,7 +79,7 @@ registered ids, e.g. `antmaze-medium-corner-all-squares-v0`, won't work as `--en
 | ------------------ | ------------------------------------------------- | ------- | -------------------------- |
 | antmaze-medium     | `antmaze-medium-corner-all-squares-online-v0`     | 1000    | `antmaze-medium-{navigate,stitch,explore}-v0` |
 | pointmaze-teleport | `pointmaze-teleport-corner-all-squares-online-v0` | 1000    | `pointmaze-teleport-{navigate,stitch}-v0` |
-| antsoccer-arena    | `antsoccer-arena-easy-online-v0`                  | 500     | `antsoccer-arena-{navigate,stitch}-v0` |
+| antsoccer-arena    | `antsoccer-arena-less-easy-online-v0`             | 500     | `antsoccer-arena-{navigate,stitch}-v0` |
 | cube-single        | `cube-single-multigoal-online-v0`                 | 200     | `cube-single-{play,noisy}-v0` |
 
 First train our estimator on the same dataset used for RLPD (above), then:

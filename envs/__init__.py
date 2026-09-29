@@ -46,7 +46,9 @@ register(
     ),
 )
 
-# antsoccer-arena: ant at (10, 10), ball at (11, 11), eight ball goals up and to the right of the ball.
+# antsoccer-arena: ant at (6, 6), ball at (8, 8) (~3 units in front of it), and eight goals 1 to 2.8 units beyond the
+# ball on the side away from the ant. (Built as an "easy" task with ant (10, 10), ball (11, 11) and the goals below,
+# with the ant pulled back to (9, 9) and everything shifted by (-3, -3).)
 antsoccer_arena_easy_goal_xys = [
     (11.0, 12.0),
     (12.0, 11.0),
@@ -57,8 +59,9 @@ antsoccer_arena_easy_goal_xys = [
     (11.0, 13.0),
     (13.0, 11.0),
 ]
+antsoccer_arena_less_easy_goal_xys = [(x - 3.0, y - 3.0) for x, y in antsoccer_arena_easy_goal_xys]
 register(
-    id='antsoccer-arena-easy-v0',
+    id='antsoccer-arena-less-easy-v0',
     entry_point='envs.maze:make_maze_env',
     max_episode_steps=500,
     kwargs=dict(
@@ -66,8 +69,8 @@ register(
         maze_env_type='ball',
         maze_type='arena',
         tasks=[
-            dict(agent_init_xy=(10.0, 10.0), ball_init_xy=(11.0, 11.0), goal_xy=goal_xy)
-            for goal_xy in antsoccer_arena_easy_goal_xys
+            dict(agent_init_xy=(6.0, 6.0), ball_init_xy=(8.0, 8.0), goal_xy=goal_xy)
+            for goal_xy in antsoccer_arena_less_easy_goal_xys
         ],
         **online_dict,
     ),

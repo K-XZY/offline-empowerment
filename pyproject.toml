@@ -1,0 +1,32 @@
+[project]
+name = "offline-empowerment"
+version = "0.1.0"
+description = "Measuring empowerment from offline data for intrinsically motivated exploration"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "ogbench==1.2.1",
+    "jax>=0.4.26",
+    "flax>=0.8.4",
+    "distrax>=0.1.5",
+    "optax",
+    "ml_collections",
+    "absl-py",
+    "numpy",
+    "tqdm",
+    "wandb",
+    "matplotlib",
+]
+
+[project.optional-dependencies]
+cuda = ["jax[cuda12]>=0.4.26"]
+
+[tool.uv]
+package = false
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.format]
+quote-style = "single"

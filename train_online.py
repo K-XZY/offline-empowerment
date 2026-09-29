@@ -123,7 +123,9 @@ def main(_):
     while env_steps < FLAGS.total_env_steps:
         if env_steps >= next_eval:
             eval_agent = jax.device_put(agent, device=jax.devices('cpu')[0])
-            eval_metrics = {f'evaluation/{k}': v for k, v in evaluate(eval_agent, eval_env, FLAGS.eval_episodes).items()}
+            eval_metrics = {
+                f'evaluation/{k}': v for k, v in evaluate(eval_agent, eval_env, FLAGS.eval_episodes).items()
+            }
             wandb.log(eval_metrics, step=env_steps)
             eval_logger.log(eval_metrics, step=env_steps)
             next_eval += FLAGS.eval_interval

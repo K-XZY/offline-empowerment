@@ -154,7 +154,9 @@ def evaluate(agent, env, num_episodes, temperature=0.0):
         done, step, ep_return = False, 0, 0.0
         while not done:
             rng, key = jax.random.split(rng)
-            action = np.clip(np.array(agent.sample_actions(observation, goal, seed=key, temperature=temperature)), -1, 1)
+            action = np.clip(
+                np.array(agent.sample_actions(observation, goal, seed=key, temperature=temperature)), -1, 1
+            )
             observation, reward, terminated, truncated, info = env.step(action)
             done = terminated or truncated
             step += 1

@@ -98,7 +98,9 @@ class EmpowermentCRLAgent(flax.struct.PyTreeNode):
 
     def distill_loss(self, batch, grad_params):
         """MSE of E_theta(s) onto T(s, a, s+) = (phi(s, a) - phi'(s)) . psi(s+) / sqrt(d), critics frozen."""
-        phi, phi_prime, psi = self.network.select('critic')(batch['observations'], batch['actions'], batch['value_goals'])
+        phi, phi_prime, psi = self.network.select('critic')(
+            batch['observations'], batch['actions'], batch['value_goals']
+        )
         phi, phi_prime, psi = jax.lax.stop_gradient((phi, phi_prime, psi))
         target = jnp.sum((phi - phi_prime) * psi, axis=-1) / jnp.sqrt(phi.shape[-1])
 

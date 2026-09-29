@@ -61,7 +61,8 @@ def offline_empowerment_values(agent, observations, dataset_name, seed=0):
     config = agent.config
     cache_dir = os.path.join(config['emp_checkpoint_path'], 'empowerment_values')
     cache_path = os.path.join(
-        cache_dir, f"{dataset_name}_e{config['emp_restore_epoch']}_n{int(config['emp_num_splus_samples'])}_seed{seed}.npy"
+        cache_dir,
+        f'{dataset_name}_e{config["emp_restore_epoch"]}_n{int(config["emp_num_splus_samples"])}_seed{seed}.npy',
     )
     if os.path.exists(cache_path):
         values = np.load(cache_path)

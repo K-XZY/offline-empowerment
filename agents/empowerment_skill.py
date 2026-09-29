@@ -399,7 +399,9 @@ class EmpowermentAgent(flax.struct.PyTreeNode):
         target_q_def, target_v_def = make_nets()
 
         ex_skills = jnp.eye(num_skills)[jnp.arange(ex_observations.shape[0]) % num_skills]
-        network_def = ModuleDict(dict(q=q_def, v=v_def, target_q=target_q_def, target_v=target_v_def, policy=policy_def))
+        network_def = ModuleDict(
+            dict(q=q_def, v=v_def, target_q=target_q_def, target_v=target_v_def, policy=policy_def)
+        )
         network_params = network_def.init(
             init_rng,
             q=(ex_observations, ex_actions, ex_skills, ex_observations),

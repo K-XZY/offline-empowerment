@@ -47,7 +47,9 @@ DISTILL_MODES = ('distill', 'distill-to-rlpd')
 
 
 def _latest_epoch(run_dir):
-    epochs = [int(re.search(r'params_(\d+)\.pkl$', p).group(1)) for p in glob.glob(os.path.join(run_dir, 'params_*.pkl'))]
+    epochs = [
+        int(re.search(r'params_(\d+)\.pkl$', p).group(1)) for p in glob.glob(os.path.join(run_dir, 'params_*.pkl'))
+    ]
     if not epochs:
         raise FileNotFoundError(f'no params_*.pkl in {run_dir}')
     return max(epochs)
@@ -418,7 +420,9 @@ class OnlineCRLAgent(flax.struct.PyTreeNode):
         )
 
         def twin_critic():
-            return GCValue(hidden_dims=tuple(config['value_hidden_dims']), layer_norm=config['layer_norm'], ensemble=True)
+            return GCValue(
+                hidden_dims=tuple(config['value_hidden_dims']), layer_norm=config['layer_norm'], ensemble=True
+            )
 
         emp_agent, emp_mean_metric = None, None
         if config['add_explore'] is not None:
@@ -473,7 +477,9 @@ class OnlineCRLAgent(flax.struct.PyTreeNode):
 
         config = config.to_dict() if hasattr(config, 'to_dict') else dict(config)
         config['emp_mean_metric'] = emp_mean_metric
-        return cls(rng, network=network, config=flax.core.FrozenDict(**config), emp_agent=emp_agent, rnd_state=rnd_state)
+        return cls(
+            rng, network=network, config=flax.core.FrozenDict(**config), emp_agent=emp_agent, rnd_state=rnd_state
+        )
 
 
 def get_config():

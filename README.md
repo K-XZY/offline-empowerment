@@ -114,6 +114,18 @@ python train_online.py --env_name=... --offline_dataset=... --agent.rnd_bonus_sc
 anneal β / β_RND linearly to 0 over that fraction of training, and `--rlpd_frac_time` stops mixing in offline data
 after that fraction of training.
 
+Online runs (CRL and SUPE) write their full train state to `<run dir>/train_state.pkl` every `--checkpoint_interval`
+env steps (default: `--save_interval`) and at the end: agent, replay buffer, both envs (incl. their MuJoCo state), all
+rngs and the loop counters. To continue a crashed run, or to train a finished one for longer:
+
+```bash
+python train_online.py --resume_dir=exp/<run_group>/<run_name> [--total_env_steps=<new total>]
+```
+
+This reuses the run's `flags.json`, trims `train.csv` / `eval.csv` to the checkpoint and appends to them (and to its
+wandb run), so the result is the same as one uninterrupted run (bitwise on CPU). The annealing fractions and
+`--rlpd_frac_time` are fractions of `--total_env_steps`, so with those, extending a run changes its schedule.
+
 ### SUPE
 
 SUPE first pretrains OPAL skills on the offline dataset (the skill horizon H must match the online

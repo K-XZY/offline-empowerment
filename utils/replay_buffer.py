@@ -45,6 +45,32 @@ class TrajectoryReplayBuffer:
         self._traj_end = np.full((self.capacity,), -1, dtype=np.int64)  # abs idx of the trajectory's marker row
         self._open_rows = []  # abs indices of the in-progress trajectory
 
+    def state_dict(self):
+        """Everything needed to continue exactly (only the filled rows are stored)."""
+        size = self.size
+        return dict(
+            data={key: buffer[:size].copy() for key, buffer in self._data.items()},
+            total=self.total,
+            valids=self._valids[:size].copy(),
+            num_valid=self._num_valid,
+            traj_end=self._traj_end[:size].copy(),
+            open_rows=list(self._open_rows),
+        )
+
+    def load_state_dict(self, state):
+        size = len(state['valids'])
+        assert size <= self.capacity and state['data'].keys() == self._data.keys()
+        for key, buffer in self._data.items():
+            assert state['data'][key].shape[1:] == buffer.shape[1:] and state['data'][key].dtype == buffer.dtype, key
+            buffer[:size] = state['data'][key]
+        self.total = int(state['total'])
+        self._valids[:size] = state['valids']
+        self._num_valid = int(state['num_valid'])
+        self._traj_end[:size] = state['traj_end']
+        self._open_rows = list(state['open_rows'])
+        self._valid_slots_cache = (-1, None)
+        assert self.size == size
+
     @property
     def size(self):
         return min(self.total, self.capacity)

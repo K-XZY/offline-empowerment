@@ -10,24 +10,37 @@ import wandb
 class CsvLogger:
     """Logs metric dicts to a csv file (header fixed by the first row).
 
-    With `resume_step`, an existing file is kept up to that step and appended to.
+    With `resume_step`, an existing file is kept up to that step and appended to; with `resume_rows`, its first
+    `resume_rows` rows are kept (`num_rows` counts the rows written so far, for checkpoints).
     """
 
-    def __init__(self, path, resume_step=None):
+    def __init__(self, path, resume_step=None, resume_rows=None):
+        assert resume_step is None or resume_rows is None
         self.path = path
         self.header = None
         self.file = None
+        self.num_rows = 0
         self.disallowed_types = (wandb.Image, wandb.Video, wandb.Histogram)
-        if resume_step is not None and os.path.exists(path) and os.path.getsize(path) > 0:
+        resuming = resume_step is not None or resume_rows is not None
+        if resuming and os.path.exists(path) and os.path.getsize(path) > 0:
             with open(path) as f:
                 lines = f.read().splitlines()
             self.header = lines[0].split(',')
-            step_col = self.header.index('step')
-            # drop rows logged after the checkpoint we resume from
-            rows = [line for line in lines[1:] if int(line.split(',')[step_col]) <= resume_step]
+            if resume_rows is not None:
+                assert len(lines) - 1 >= resume_rows, (
+                    f'{path} has {len(lines) - 1} rows, the checkpoint expects {resume_rows}'
+                )
+                rows = lines[1 : 1 + resume_rows]
+            else:
+                # drop rows logged after the checkpoint we resume from
+                step_col = self.header.index('step')
+                rows = [line for line in lines[1:] if int(line.split(',')[step_col]) <= resume_step]
             self.file = open(path, 'w')
             self.file.write('\n'.join([lines[0], *rows]) + '\n')
             self.file.flush()
+            self.num_rows = len(rows)
+        elif resume_rows:
+            raise FileNotFoundError(f'{path} is missing, the checkpoint expects {resume_rows} rows')
 
     def log(self, row, step):
         row['step'] = step
@@ -38,6 +51,7 @@ class CsvLogger:
             self.file.write(','.join(self.header) + '\n')
         self.file.write(','.join([str(row.get(k, '')) for k in self.header]) + '\n')
         self.file.flush()
+        self.num_rows += 1
 
     def close(self):
         if self.file is not None:

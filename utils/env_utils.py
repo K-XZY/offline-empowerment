@@ -1,4 +1,6 @@
 import os
+import pickle
+import zlib
 
 import numpy as np
 import ogbench
@@ -32,6 +34,43 @@ def make_online_env(env_name, episode_length=None):
             env.spec.max_episode_steps = int(episode_length)
     env.reset()
     return env
+
+
+def _env_chain(env):
+    chain = [env]
+    while hasattr(chain[-1], 'env'):
+        chain.append(chain[-1].env)
+    return chain
+
+
+def get_env_state(env):
+    """Everything needed to continue `env` exactly (for resuming online runs), as compressed pickled bytes: the
+    attributes of every wrapper and of the base env, incl. its MjData and np_random. Attributes that don't survive a
+    pickle round trip (cameras, scene options, cube's dm_control mjcf scene) are fixed at construction and skipped;
+    `set_env_state` keeps the fresh env's ones. The maze envs also draw tasks and teleport exits from the global
+    np.random, which the caller has to save itself."""
+    state = []
+    for e in _env_chain(env):
+        attrs = {}
+        for key, value in vars(e).items():
+            if key == 'env':
+                continue
+            try:
+                pickle.loads(pickle.dumps(value))
+            except Exception:  # noqa: BLE001, S112  (anything that can't be restored is construction-time)
+                continue
+            attrs[key] = value
+        state.append((type(e).__name__, attrs))
+    return zlib.compress(pickle.dumps(state), 1)  # MjData / MjModel are mostly empty arena
+
+
+def set_env_state(env, state):
+    """Load `get_env_state` output into a freshly made env of the same kind."""
+    state = pickle.loads(zlib.decompress(state))
+    chain = _env_chain(env)
+    assert [type(e).__name__ for e in chain] == [name for name, _ in state], 'env wrapper chain changed'
+    for e, (_, attrs) in zip(chain, state):
+        vars(e).update(attrs)
 
 
 def env_horizon(env):

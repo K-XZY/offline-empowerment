@@ -1,10 +1,13 @@
 """Online experience collection (one env, one step at a time) and evaluation."""
 
+import copy
 from collections import defaultdict
 
 import jax
 import jax.numpy as jnp
 import numpy as np
+
+from utils.env_utils import get_env_state, set_env_state
 
 
 def example_transition(example_batch, agent):
@@ -35,6 +38,20 @@ class Collector:
     """
 
     RND_CHUNK = 128
+    # everything besides the env and the buffer that a resumed run needs to continue exactly
+    STATE_ATTRS = (
+        '_pending_empowerment',
+        '_pending_rnd',
+        '_pending_rnd_first',
+        '_closed_episodes',
+        '_episode_start_abs',
+        'observation',
+        'goal',
+        'ep_return',
+        'ep_length',
+        'ep_success',
+        '_episode_first_row',
+    )
 
     def __init__(self, env, buffer, seed):
         self.env = env
@@ -46,6 +63,19 @@ class Collector:
         self._closed_episodes = []  # (first row, marker row) of episodes closed since the last flush
         self._episode_start_abs = None
         self._reset_episode()
+
+    def state_dict(self):
+        """Collector + env state (the buffer is saved separately)."""
+        state = {key: copy.deepcopy(getattr(self, key)) for key in self.STATE_ATTRS}
+        state['rng'] = np.asarray(jax.device_get(self.rng))
+        state['env'] = get_env_state(self.env)
+        return state
+
+    def load_state_dict(self, state):
+        for key in self.STATE_ATTRS:
+            setattr(self, key, copy.deepcopy(state[key]))
+        self.rng = jnp.asarray(state['rng'])
+        set_env_state(self.env, state['env'])
 
     def _reset_episode(self):
         self.observation, info = self.env.reset()
@@ -152,6 +182,8 @@ class MacroCollector(Collector):
     """SUPE: one row per macro step. The high level picks u (the OPAL prior during warm-up), the frozen decoder runs
     it for k env steps (or until the episode ends), and the row is (s_t, u, R, mask) with
     R = sum_i gamma_low^i (r_i + reward_shift)."""
+
+    STATE_ATTRS = Collector.STATE_ATTRS + ('env_steps', 'last_transition')
 
     def __init__(self, env, buffer, seed, k, gamma_low, reward_shift, store_task_goals):
         self.k = int(k)

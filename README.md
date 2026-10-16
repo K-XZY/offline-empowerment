@@ -145,9 +145,8 @@ python train_online.py --agent=agents/supe.py --env_name=antmaze-medium-corner-a
 ```
 
 `goal_conditioned` feeds the task goal to SUPE's actor, critic and reward model (offline rows get random task goals),
-`aux_schedule=paper` trains the reward model and RND predictor once per macro step as in SUPE, `interleave` makes every
-critic minibatch half online / half offline, and `utd_ratio=4` with the default 1024-row critic step gives SUPE the same
-gradient budget as the CRL agents.
+`aux_schedule=paper` trains the reward model and RND predictor once per macro step as in SUPE, and `interleave` makes
+every critic minibatch half online / half offline.
 
 | Paper (Table 4, SUPE)                    | Flag                                                         |
 | ---------------------------------------- | ------------------------------------------------------------ |

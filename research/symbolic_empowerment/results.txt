@@ -1,0 +1,30 @@
+
+=== teleport=False, n=4 ===
+MAE vs truth in nats, shown as visited / never-visited states
+      N  visited |       teacher |  mlp(teacher) |      sel: all | sel: reliable  picks (reliable)
+    500     0.41 | 1.652 / 1.118 | 1.653 / 2.468 | 0.409 / 2.475 | 0.309 / 1.492  {'P3_det_model_bfs': 2, 'P4_det_model_bfs_optimistic': 1, 'P2_local_openness': 2}
+   2000     0.53 | 1.075 / 0.590 | 1.075 / 3.254 | 0.254 / 2.398 | 0.245 / 1.942  {'P3_det_model_bfs': 4, 'P2_local_openness': 1}
+  10000     0.68 | 0.743 / 0.345 | 0.743 / 2.547 | 0.143 / 2.324 | 0.143 / 2.324  {'P3_det_model_bfs': 5}
+  50000     0.79 | 0.434 / 0.232 | 0.442 / 1.814 | 0.028 / 2.263 | 0.028 / 2.263  {'P3_det_model_bfs': 5}
+  truth std over states: 0.503 nats
+  per-program (N=2000): Spearman with teacher on all visited / reliable states; MAE vs truth
+    P0_constant                  score=-0.87 / -0.69  mae=1.347 / 0.834
+    P1_manhattan_ball            score=+0.27 / +0.59  mae=0.262 / 0.489
+    P2_local_openness            score=+0.28 / +0.65  mae=0.243 / 0.167
+    P3_det_model_bfs             score=+0.81 / +0.77  mae=0.254 / 2.398
+    P4_det_model_bfs_optimistic  score=+0.68 / +0.77  mae=0.126 / 2.048
+
+=== teleport=True, n=4 ===
+MAE vs truth in nats, shown as visited / never-visited states
+      N  visited |       teacher |  mlp(teacher) |      sel: all | sel: reliable  picks (reliable)
+    500     0.46 | 1.694 / 1.239 | 1.690 / 2.165 | 0.452 / 2.492 | 0.375 / 2.373  {'P3_det_model_bfs': 4, 'P4_det_model_bfs_optimistic': 1}
+   2000     0.63 | 1.147 / 0.753 | 1.150 / 2.352 | 0.279 / 2.394 | 0.249 / 1.495  {'P4_det_model_bfs_optimistic': 1, 'P1_manhattan_ball': 1, 'P2_local_openness': 1, 'P3_det_model_bfs': 2}
+  10000     0.83 | 0.778 / 0.482 | 0.777 / 2.065 | 0.141 / 2.291 | 0.141 / 2.291  {'P3_det_model_bfs': 5}
+  50000     0.96 | 0.440 / 0.238 | 0.450 / 1.775 | 0.032 / 2.018 | 0.032 / 2.018  {'P3_det_model_bfs': 5}
+  truth std over states: 0.513 nats
+  per-program (N=2000): Spearman with teacher on all visited / reliable states; MAE vs truth
+    P0_constant                  score=-0.41 / -0.69  mae=1.267 / 0.866
+    P1_manhattan_ball            score=+0.37 / +0.70  mae=0.309 / 0.503
+    P2_local_openness            score=+0.39 / +0.70  mae=0.260 / 0.150
+    P3_det_model_bfs             score=+0.80 / +0.82  mae=0.279 / 2.394
+    P4_det_model_bfs_optimistic  score=+0.68 / +0.81  mae=0.134 / 1.813
